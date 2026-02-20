@@ -248,6 +248,8 @@ def main():
 
     log("TOOL1", "START", "Crawler service started")
 
+    import queue_engine
+
     while True:
 
         log("TOOL1", "RUN", "Crawler cycle started")
@@ -275,19 +277,18 @@ def main():
             t.start()
             threads.append(t)
 
+        # ===== WAIT THREADS =====
         for t in threads:
-    t.join()
+            t.join()
 
-# ===== CALL TOOL 2 =====
-import queue_engine
-log("TOOL1", "CALL", "Trigger TOOL2")
-queue_engine.build_queue()
-log("TOOL1", "DONE", "TOOL2 completed")
+        # ===== CALL TOOL 2 =====
+        log("TOOL1", "CALL", "Trigger TOOL2")
+        queue_engine.build_queue()
+        log("TOOL1", "DONE", "TOOL2 completed")
 
-# ===== SLEEP =====
-log("TOOL1", "SLEEP", "Sleeping 1day")
-time.sleep(86400)
-
+        # ===== SLEEP =====
+        log("TOOL1", "SLEEP", "Sleeping 1 day")
+        time.sleep(86400)
 
 if __name__ == "__main__":
     main()
