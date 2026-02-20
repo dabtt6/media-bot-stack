@@ -1,67 +1,100 @@
 # -*- coding: utf-8 -*-
 
 import sqlite3
+import requests
 import os
+import time
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "data", "crawler_master_full.db")
 
-def build_queue():
+QBIT_URL = os.environ.get("QBIT_URL")
+USERNAME = os.environ.get("QBIT_USER")
+PASSWORD = os.environ.get("QBIT_PASS")
 
-    print("?? TOOL 2 - BUILD QUEUE")
+SESSION = requests.Session()
+
+MAX_RETRY = 3
+
+def login():
+    r = SESSION.post(
+        QBIT_URL + "/api/v2/auth/login",
+        data={"username": USERNAME, "password": PASSWORD}
+    )
+    return r.text == "Ok."
+
+def process_one():
 
     conn = sqlite3.connect(DB)
     c = conn.cursor()
 
-    agent_codes = set(
-        row[0] for row in c.execute("SELECT code FROM agent").fetchall()
-    )
+    row = c.execute("""
+        SELECT id, code, torrent_url, retry_count
+        FROM queuedqbit
+        WHERE status='new'
+        LIMIT 1
+    """).fetchone()
 
-    existing_queue = set(
-        row[0] for row in c.execute("SELECT code FROM queuedqbit").fetchall()
-    )
+    if not row:
+        conn.close()
+        return False
 
-    crawl_rows = c.execute("""
-        SELECT code, actor_name, torrent_url, size_mb, seeds
-        FROM crawl
-    """).fetchall()
+    row_id, code, url, retry = row
 
-    new_count = 0
-    existed_count = 0
+    c.execute("UPDATE queuedqbit SET status='adding' WHERE id=?", (row_id,))
+    conn.commit()
 
-    for code, actor, url, size_mb, seeds in crawl_rows:
+    try:
+        torrent_data = requests.get(url, timeout=30).content
 
-        if code in existing_queue:
-            continue
+        files = {'torrents': ('file.torrent', torrent_data)}
+        r = SESSION.post(QBIT_URL + "/api/v2/torrents/add", files=files)
 
-        status = "existed" if code in agent_codes else "new"
+        if r.status_code != 200:
+            raise Exception("Add failed")
 
         c.execute("""
-            INSERT INTO queuedqbit
-            (code, actor_name, torrent_url, size_mb, seeds, status, created_at)
-            VALUES (?,?,?,?,?,?,?)
-        """, (
-            code,
-            actor,
-            url,
-            size_mb,
-            seeds,
-            status,
-            datetime.now().isoformat()
-        ))
+            UPDATE queuedqbit
+            SET status='added'
+            WHERE id=?
+        """,(row_id,))
 
-        if status == "new":
-            new_count += 1
-        else:
-            existed_count += 1
+        print("Added:", code)
+
+    except Exception as e:
+
+        retry += 1
+
+        new_status = "failed" if retry >= MAX_RETRY else "new"
+
+        c.execute("""
+            UPDATE queuedqbit
+            SET status=?, retry_count=?
+            WHERE id=?
+        """,(new_status, retry, row_id))
+
+        print("Error:", code, e)
 
     conn.commit()
     conn.close()
+    return True
 
-    print("New:", new_count)
-    print("Existed:", existed_count)
-    print("DONE")
+def main():
+
+    print("? TOOL 4 - ADD WORKER")
+
+    while True:
+
+        if not login():
+            print("Login fail")
+            time.sleep(30)
+            continue
+
+        processed = process_one()
+
+        if not processed:
+            time.sleep(10)
 
 if __name__ == "__main__":
-    build_queue()
+    main()
