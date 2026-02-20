@@ -276,11 +276,17 @@ def main():
             threads.append(t)
 
         for t in threads:
-            t.join()
+    t.join()
 
-        log("TOOL1", "SLEEP", "Sleeping 12 hours")
+# ===== CALL TOOL 2 =====
+import queue_engine
+log("TOOL1", "CALL", "Trigger TOOL2")
+queue_engine.build_queue()
+log("TOOL1", "DONE", "TOOL2 completed")
 
-        time.sleep(86400)  # 12 ti?ng
+# ===== SLEEP =====
+log("TOOL1", "SLEEP", "Sleeping 1day")
+time.sleep(86400)
 
 
 if __name__ == "__main__":
