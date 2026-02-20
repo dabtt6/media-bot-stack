@@ -6,7 +6,7 @@ import traceback
 import crawler_engine_pro_final
 import queue_engine
 
-INTERVAL = 600
+INTERVAL = 86400
 
 def log(msg):
     print(msg, flush=True)
