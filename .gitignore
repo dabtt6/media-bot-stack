@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Database
+*.db
+
+# Docker volumes
+qbit-config/
+media-bot/data/
+crawler-service/data/
+
+# System volumes
+portainer-data/
+scrutiny-db/
+jellyfin-config/
+jellyfin-cache/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
