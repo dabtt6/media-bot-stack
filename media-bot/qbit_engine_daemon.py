@@ -1,72 +1,86 @@
-import requests
+# -*- coding: utf-8 -*-
+
 import sqlite3
 import os
-import time
-from logger_core import log
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "data", "crawler_master_full.db")
 
-QBIT_URL = os.getenv("QBIT_URL")
-QBIT_USER = os.getenv("QBIT_USER")
-QBIT_PASS = os.getenv("QBIT_PASS")
+def build_queue():
 
-SESSION = requests.Session()
+    print("?? TOOL 2 - BUILD QUEUE")
 
-def login():
-    while True:
-        try:
-            r = SESSION.post(
-                QBIT_URL + "/api/v2/auth/login",
-                data={"username": QBIT_USER, "password": QBIT_PASS},
-                timeout=10
-            )
-            if r.text == "Ok.":
-                log("TOOL4", "RUNNING", "qBit login OK")
-                return
-        except:
-            log("TOOL4", "ERROR", "Login failed")
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
 
-        time.sleep(5)
+    # L?y danh sách code dã t?n t?i trong movies (agent snapshot)
+    agent_codes = set(
+        row[0] for row in c.execute("SELECT code FROM agent_snapshot")
+    )
 
-def main():
-    log("TOOL4", "START", "Add worker started")
-    login()
+    # L?y danh sách code dã có trong queue
+    existing_queue = set(
+        row[0] for row in c.execute("SELECT code FROM queuedqbit")
+    )
 
-    while True:
-        conn = sqlite3.connect(DB)
-        c = conn.cursor()
+    # L?y danh sách code t? crawl
+    codes = c.execute("SELECT DISTINCT code FROM crawl").fetchall()
 
-        row = c.execute("""
-            SELECT id, code, torrent_url FROM queuedqbit
-            WHERE status='new'
-            LIMIT 1
-        """).fetchone()
+    new_count = 0
+    existed_count = 0
+    skipped_count = 0
 
-        if not row:
-            log("TOOL4", "IDLE", "No new torrents")
-            conn.close()
-            time.sleep(20)
+    for (code,) in codes:
+
+        # N?u dã có trong queue thì b? qua
+        if code in existing_queue:
+            skipped_count += 1
             continue
 
-        row_id, code, url = row
+        # L?y t?t c? source c?a code dó
+        rows = c.execute("""
+            SELECT actor_name, torrent_url, size_mb, seeds
+            FROM crawl
+            WHERE code=?
+        """, (code,)).fetchall()
 
-        try:
-            SESSION.post(
-                QBIT_URL + "/api/v2/torrents/add",
-                data={"urls": url}
-            )
+        if not rows:
+            continue
 
-            c.execute("UPDATE queuedqbit SET status='added' WHERE id=?", (row_id,))
-            conn.commit()
+        # Ch?n torrent t?t nh?t (uu tiên seeds, sau dó size)
+        best = max(rows, key=lambda x: (x[3], x[2]))
+        actor, url, size_mb, seeds = best
 
-            log("TOOL4", "RUNNING", f"Added torrent: {code}")
+        # N?u dã t?n t?i trên disk
+        if code in agent_codes:
+            status = "existed"
+            existed_count += 1
+        else:
+            status = "new"
+            new_count += 1
 
-        except Exception as e:
-            log("TOOL4", "ERROR", str(e))
+        c.execute("""
+            INSERT INTO queuedqbit
+            (code, actor_name, torrent_url, size_mb, seeds, status, created_at)
+            VALUES (?,?,?,?,?,?,?)
+        """, (
+            code,
+            actor,
+            url,
+            size_mb,
+            seeds,
+            status,
+            datetime.now().isoformat()
+        ))
 
-        conn.close()
-        time.sleep(50)
+    conn.commit()
+    conn.close()
+
+    print("New:", new_count)
+    print("Existed:", existed_count)
+    print("Skipped (already in queue):", skipped_count)
+    print("DONE")
 
 if __name__ == "__main__":
-    main()
+    build_queue()
