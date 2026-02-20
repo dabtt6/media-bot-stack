@@ -30,6 +30,7 @@ services:
       - "5001:5001"
     volumes:
       - /data/movies:/data
+      - ./media-bot/data:/app/data 
     networks:
       - media-net
 
