@@ -122,70 +122,78 @@ def crawl_ijav(actor_name, actor_url):
     conn = get_conn()
     c = conn.cursor()
 
-    r = requests.get(actor_url, headers=HEADERS, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
+    try:
+        r = requests.get(actor_url, headers=HEADERS, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
 
-    movie_links = [
-        urljoin(actor_url, a["href"])
-        for a in soup.select("div.name a")
-    ]
+        movie_links = [
+            urljoin(actor_url, a["href"])
+            for a in soup.select("div.name a")
+        ]
 
-    for m in movie_links:
+        for m in movie_links:
 
-        try:
-            time.sleep(0.6)
+            try:
+                time.sleep(0.6)
 
-            rm = requests.get(m, headers=HEADERS, timeout=20)
-            msoup = BeautifulSoup(rm.text, "html.parser")
+                rm = requests.get(m, headers=HEADERS, timeout=20)
+                msoup = BeautifulSoup(rm.text, "html.parser")
 
-            code = extract_code(m)
-            if not code:
+                code = extract_code(m)
+                if not code:
+                    continue
+
+                torrents = []
+
+                for tr in msoup.find_all("tr"):
+                    text = tr.get_text(" ", strip=True)
+                    if "#" in text and "Download" in text:
+
+                        size_match = re.search(r'(\d+(\.\d+)?)(gb|mb)', text.lower())
+                        size = parse_size(size_match.group()) if size_match else 0
+
+                        seeds_match = re.search(r'Seeds\s*(\d+)', text)
+                        seeds = int(seeds_match.group(1)) if seeds_match else 0
+
+                        date_match = re.search(r'\d{2}/\d{2}/\d{4}', text)
+                        date_ts = parse_date(date_match.group()) if date_match else 0
+
+                        dl = None
+                        for a in tr.find_all("a", href=True):
+                            if "/download/" in a["href"]:
+                                dl = urljoin(actor_url, a["href"])
+                                break
+
+                        if size > 0 and dl:
+                            torrents.append((size, seeds, date_ts, dl))
+
+                if torrents:
+                    torrents.sort(key=lambda x: (x[1], x[2], x[0]), reverse=True)
+                    best = torrents[0]
+
+                    now = datetime.now().isoformat()
+
+                    c.execute("""
+                        INSERT OR REPLACE INTO crawl
+                        (actor_name, source, code, torrent_url,
+                         size_mb, seeds, date_ts, created_at, last_seen)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                    """, (
+                        actor_name, "ijav", code,
+                        best[3], best[0], best[1], best[2],
+                        now, now
+                    ))
+
+                    conn.commit()
+
+            except Exception:
                 continue
 
-            torrents = []
+    except Exception as e:
+        raise e
 
-            for tr in msoup.find_all("tr"):
-                text = tr.get_text(" ", strip=True)
-                if "#" in text and "Download" in text:
-
-                    size_match = re.search(r'(\d+(\.\d+)?)(gb|mb)', text.lower())
-                    size = parse_size(size_match.group()) if size_match else 0
-
-                    seeds_match = re.search(r'Seeds\s*(\d+)', text)
-                    seeds = int(seeds_match.group(1)) if seeds_match else 0
-
-                    date_match = re.search(r'\d{2}/\d{2}/\d{4}', text)
-                    date_ts = parse_date(date_match.group()) if date_match else 0
-
-                    dl = None
-                    for a in tr.find_all("a", href=True):
-                        if "/download/" in a["href"]:
-                            dl = urljoin(actor_url, a["href"])
-                            break
-
-                    if size > 0 and dl:
-                        torrents.append((size, seeds, date_ts, dl))
-
-            if torrents:
-                torrents.sort(key=lambda x: (x[1], x[2], x[0]), reverse=True)
-                best = torrents[0]
-
-                now = datetime.now().isoformat()
-
-                c.execute("""
-                    INSERT OR REPLACE INTO crawl
-                    (actor_name, source, code, torrent_url,
-                     size_mb, seeds, date_ts, created_at, last_seen)
-                    VALUES (?,?,?,?,?,?,?,?,?)
-                """, (
-                    actor_name, "ijav", code,
-                    best[3], best[0], best[1], best[2],
-                    now, now
-                ))
-
-                conn.commit()
-
-    conn.close()
+    finally:
+        conn.close()
 
 
 # =========================
@@ -198,33 +206,38 @@ def crawl_onejav(actor_name, actor_url):
     conn = get_conn()
     c = conn.cursor()
 
-    r = requests.get(actor_url, headers=HEADERS, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
+    try:
+        r = requests.get(actor_url, headers=HEADERS, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
 
-    for a in soup.find_all("a", href=True):
-        if "/torrent/" in a["href"] and "/download/" in a["href"]:
+        for a in soup.find_all("a", href=True):
+            if "/torrent/" in a["href"] and "/download/" in a["href"]:
 
-            link = urljoin(actor_url, a["href"])
-            code = extract_code_from_onejav(link)
-            if not code:
-                continue
+                link = urljoin(actor_url, a["href"])
+                code = extract_code_from_onejav(link)
+                if not code:
+                    continue
 
-            now = datetime.now().isoformat()
+                now = datetime.now().isoformat()
 
-            c.execute("""
-                INSERT OR REPLACE INTO crawl
-                (actor_name, source, code, torrent_url,
-                 size_mb, seeds, date_ts, created_at, last_seen)
-                VALUES (?,?,?,?,?,?,?,?,?)
-            """, (
-                actor_name, "onejav", code,
-                link, 0, 0, 0,
-                now, now
-            ))
+                c.execute("""
+                    INSERT OR REPLACE INTO crawl
+                    (actor_name, source, code, torrent_url,
+                     size_mb, seeds, date_ts, created_at, last_seen)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    actor_name, "onejav", code,
+                    link, 0, 0, 0,
+                    now, now
+                ))
 
-            conn.commit()
+                conn.commit()
 
-    conn.close()
+    except Exception as e:
+        raise e
+
+    finally:
+        conn.close()
 
 
 # =========================
