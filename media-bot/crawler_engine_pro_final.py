@@ -135,7 +135,7 @@ def crawl_ijav(actor_name, actor_url):
                             SET last_seen=?
                             WHERE torrent_url=?
                         """, (now, best[3]))
-                        print(f?? No changes, just updated last_seen for: {code}")
+                        print(f"No changes, just updated last_seen for: {code}")
                 else:
                     # Insert new record if not found
                     c.execute("""
