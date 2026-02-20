@@ -2,15 +2,9 @@
 
 cd /docker/media-stack || exit
 
-# Kiểm tra thay đổi
+# Only push if changes exist
 if [[ -n $(git status --porcelain) ]]; then
-    echo "Changes detected..."
-
     git add .
     git commit -m "auto update $(date '+%Y-%m-%d %H:%M:%S')"
     git push
-
-    echo "Pushed to GitHub"
-else
-    echo "No changes"
 fi
