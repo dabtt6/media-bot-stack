@@ -14,16 +14,27 @@ QBIT_USER = os.getenv("QBIT_USER")
 QBIT_PASS = os.getenv("QBIT_PASS")
 
 MAX_RETRY = 3
+SLEEP_TIME = 5
 
 SESSION = requests.Session()
 
 
+# ===============================
+# DB CONNECT
+# ===============================
+def get_conn():
+    return sqlite3.connect(DB)
+
+
+# ===============================
+# LOG
+# ===============================
 def log(msg):
     print(f"[TOOL4] {datetime.now().isoformat()} - {msg}", flush=True)
 
 
 # ===============================
-# LOGIN
+# LOGIN QBIT
 # ===============================
 def login():
     while True:
@@ -33,6 +44,7 @@ def login():
                 data={"username": QBIT_USER, "password": QBIT_PASS},
                 timeout=10
             )
+
             if r.text == "Ok.":
                 log("qBit ready")
                 return
@@ -44,7 +56,7 @@ def login():
 
 
 # ===============================
-# DOWNLOAD
+# DOWNLOAD TORRENT
 # ===============================
 def download_torrent(url):
     r = requests.get(url, timeout=(10, 60))
@@ -54,7 +66,7 @@ def download_torrent(url):
 
 
 # ===============================
-# ADD
+# ADD TO QBIT
 # ===============================
 def add_torrent(data, save_path):
 
@@ -78,18 +90,18 @@ def add_torrent(data, save_path):
 
 
 # ===============================
-# PROCESS
+# PROCESS ONE BATCH
 # ===============================
 def process_cycle():
 
-    conn = sqlite3.connect(DB)
+    conn = get_conn()
     c = conn.cursor()
 
     rows = c.execute("""
         SELECT id, code, torrent_url, actor_name, retry_count
         FROM queuedqbit
         WHERE status='new'
-           OR (status='error' AND COALESCE(retry_count,0) < ?)
+           OR (status='error' AND retry_count < ?)
         ORDER BY id ASC
         LIMIT 2
     """, (MAX_RETRY,)).fetchall()
@@ -103,7 +115,13 @@ def process_cycle():
         log(f"Processing {code}")
 
         try:
-            c.execute("UPDATE queuedqbit SET status='adding' WHERE id=?", (row_id,))
+            # set adding
+            c.execute("""
+                UPDATE queuedqbit
+                SET status='adding',
+                    last_try_at=?
+                WHERE id=?
+            """, (datetime.now().isoformat(), row_id))
             conn.commit()
 
             torrent_data = download_torrent(url)
@@ -111,24 +129,23 @@ def process_cycle():
             save_path = f"/data/downloads/{actor}"
             add_torrent(torrent_data, save_path)
 
+            # success
             c.execute("""
                 UPDATE queuedqbit
                 SET status='added',
                     added_at=?,
-                    last_try_at=?,
                     retry_count=0
                 WHERE id=?
-            """, (datetime.now().isoformat(),
-                  datetime.now().isoformat(),
-                  row_id))
-
+            """, (datetime.now().isoformat(), row_id))
             conn.commit()
+
             log(f"Added {code}")
 
         except Exception as e:
 
             log(f"Error {code}: {e}")
 
+            # increase retry
             c.execute("""
                 UPDATE queuedqbit
                 SET status='error',
@@ -136,14 +153,13 @@ def process_cycle():
                     last_try_at=?
                 WHERE id=?
             """, (datetime.now().isoformat(), row_id))
-
             conn.commit()
 
     conn.close()
 
 
 # ===============================
-# MAIN
+# MAIN LOOP
 # ===============================
 def main():
 
@@ -158,7 +174,7 @@ def main():
             log(f"Worker crash: {e}")
             login()
 
-        time.sleep(5)
+        time.sleep(SLEEP_TIME)
 
 
 if __name__ == "__main__":
