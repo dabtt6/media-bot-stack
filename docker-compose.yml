@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:4.6.5
+    container_name: qbittorrent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - WEBUI_PORT=8080
+      - WEBUI_USERNAME=admin
+      - WEBUI_PASSWORD=111111
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - ./qbit-config:/config
+      - /data:/data
+    networks:
+      - media-net
+
+
+  movie-agent:
+    build: ./movie-agent
+    container_name: movie-agent
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - /data/movies:/data
+    networks:
+      - media-net
+
+
+  media-bot:
+    build: ./media-bot
+    container_name: media-bot
+    command: ["python", "-u", "runner.py"]
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+      - movie-agent
+    volumes:
+      - ./media-bot/data:/app/data
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+    networks:
+      - media-net
+
+
+  media-bot-worker:
+    build: ./media-bot
+    container_name: media-bot-worker
+    command: ["python", "-u", "qbit_engine_daemon.py"]
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+    volumes:
+      - ./media-bot/data:/app/data
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+    networks:
+      - media-net
+
+
+  media-bot-optimizer:
+    build: ./media-bot
+    container_name: media-bot-optimizer
+    command: ["python", "-u", "qbit_optimizer.py"]
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+    volumes:
+      - ./media-bot/data:/app/data
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+    networks:
+      - media-net
+
+  media-panel:
+    build: ./media-panel
+    container_name: media-panel
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./media-bot/data:/app/data
+    networks:
+      - media-net
+
+networks:
+  media-net:
+    driver: bridge

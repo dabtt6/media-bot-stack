@@ -1,3 +1,4 @@
+from logger_core import log
 import sqlite3
 import requests
 import re
@@ -6,17 +7,21 @@ import threading
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from datetime import datetime
-
 import os
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, 'data', 'crawler_master_full.db')
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+
 
 # =========================
 # DB SAFE CONNECT
 # =========================
 def get_conn():
-    return sqlite3.connect(DB, check_same_thread=False)
+    conn = sqlite3.connect(DB, timeout=30, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    return conn
 
 # =========================
 # UTILS
@@ -29,15 +34,18 @@ def parse_size(text):
         return float(text.replace("mb", ""))
     return 0
 
+
 def parse_date(text):
     try:
         return datetime.strptime(text.strip(), "%d/%m/%Y").timestamp()
     except:
         return 0
 
+
 def extract_code(text):
     m = re.search(r'([A-Z0-9]+-\d+)', text.upper())
     return m.group(1) if m else None
+
 
 def extract_code_from_onejav(url):
     m = re.search(r'/torrent/([a-z0-9]+)/', url.lower())
@@ -45,35 +53,42 @@ def extract_code_from_onejav(url):
         return None
 
     raw = m.group(1)
-
     m2 = re.match(r'([a-z]+)(\d+)', raw)
+
     if not m2:
         return raw.upper()
 
     return f"{m2.group(1).upper()}-{m2.group(2)}"
 
+
 # =========================
 # IJAV CRAWL
 # =========================
 def crawl_ijav(actor_name, actor_url):
-    print(f"\n?? IJAV: {actor_name}")
+
+    log("TOOL1", "START", f"IJAV crawl: {actor_name}")
 
     conn = get_conn()
     c = conn.cursor()
 
-    r = requests.get(actor_url, headers=HEADERS, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
+    try:
+        r = requests.get(actor_url, headers=HEADERS, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+    except Exception as e:
+        log("TOOL1", "ERROR", f"Actor page failed {actor_name}: {str(e)}")
+        conn.close()
+        return
 
     movie_links = [
         urljoin(actor_url, a["href"])
         for a in soup.select("div.name a")
     ]
 
-    print("Movies:", len(movie_links))
-
     for m in movie_links:
+
         try:
-            time.sleep(0.6)
+            time.sleep(1.2)
+
             rm = requests.get(m, headers=HEADERS, timeout=20)
             msoup = BeautifulSoup(rm.text, "html.parser")
 
@@ -85,6 +100,7 @@ def crawl_ijav(actor_name, actor_url):
 
             for tr in msoup.find_all("tr"):
                 text = tr.get_text(" ", strip=True)
+
                 if "#" in text and "Download" in text:
 
                     size_match = re.search(r'(\d+(\.\d+)?)(gb|mb)', text.lower())
@@ -105,88 +121,167 @@ def crawl_ijav(actor_name, actor_url):
                     if size > 0 and dl:
                         torrents.append((size, seeds, date_ts, dl))
 
-            if torrents:
-                torrents.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
-                best = torrents[0]
+            if not torrents:
+                continue
 
+            torrents.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+            best = torrents[0]
+
+            now = datetime.now().isoformat()
+
+            row = c.execute(
+                "SELECT size_mb, seeds FROM crawl WHERE torrent_url=?",
+                (best[3],)
+            ).fetchone()
+
+            if row:
+                old_size, old_seeds = row
+
+                if best[0] != old_size or best[1] != old_seeds:
+                    c.execute("""
+                        UPDATE crawl
+                        SET size_mb=?, seeds=?, date_ts=?, last_seen=?
+                        WHERE torrent_url=?
+                    """, (best[0], best[1], best[2], now, best[3]))
+
+                    log("TOOL1", "UPDATE", f"{code} updated")
+                else:
+                    c.execute("""
+                        UPDATE crawl
+                        SET last_seen=?
+                        WHERE torrent_url=?
+                    """, (now, best[3]))
+
+            else:
                 c.execute("""
-                    INSERT OR IGNORE INTO crawl
-                    (actor_name,source,code,torrent_url,size_mb,seeds,date_ts)
-                    VALUES(?,?,?,?,?,?,?)
-                """, (actor_name, "ijav", code,
-                      best[3], best[0], best[1], best[2]))
+                    INSERT INTO crawl
+                    (actor_name, source, code, torrent_url,
+                     size_mb, seeds, date_ts, created_at, last_seen)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    actor_name, "ijav", code,
+                    best[3], best[0], best[1], best[2],
+                    now, now
+                ))
 
-                conn.commit()
+                log("TOOL1", "INSERT", f"{code} inserted")
 
-                print(f"? {code} | {round(best[0],1)}MB | Seeds:{best[1]}")
+            conn.commit()
 
         except Exception as e:
-            print("Error:", e)
+            log("TOOL1", "ERROR", f"IJAV {actor_name}: {str(e)}")
 
     conn.close()
+
 
 # =========================
 # ONEJAV CRAWL
 # =========================
 def crawl_onejav(actor_name, actor_url):
-    print(f"\n?? ONEJAV: {actor_name}")
+
+    log("TOOL1", "START", f"ONEJAV crawl: {actor_name}")
 
     conn = get_conn()
     c = conn.cursor()
 
-    r = requests.get(actor_url, headers=HEADERS, timeout=20)
-    soup = BeautifulSoup(r.text, "html.parser")
+    try:
+        r = requests.get(actor_url, headers=HEADERS, timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+    except Exception as e:
+        log("TOOL1", "ERROR", f"ONEJAV actor page fail {actor_name}: {str(e)}")
+        conn.close()
+        return
 
-    links = []
-    for a in soup.find_all("a", href=True):
-        if "/torrent/" in a["href"] and "/download/" in a["href"]:
-            links.append(urljoin(actor_url, a["href"]))
-
-    print("Torrent links:", len(links))
+    links = [
+        urljoin(actor_url, a["href"])
+        for a in soup.find_all("a", href=True)
+        if "/torrent/" in a["href"] and "/download/" in a["href"]
+    ]
 
     for link in links:
+
         try:
             code = extract_code_from_onejav(link)
             if not code:
                 continue
 
-            c.execute("""
-                INSERT OR IGNORE INTO crawl
-                (actor_name,source,code,torrent_url,size_mb,seeds,date_ts)
-                VALUES(?,?,?,?,?,?,?)
-            """, (actor_name, "onejav", code,
-                  link, 0, 0, 0))
+            now = datetime.now().isoformat()
+
+            row = c.execute(
+                "SELECT torrent_url FROM crawl WHERE torrent_url=?",
+                (link,)
+            ).fetchone()
+
+            if row:
+                c.execute("""
+                    UPDATE crawl
+                    SET last_seen=?
+                    WHERE torrent_url=?
+                """, (now, link))
+
+            else:
+                c.execute("""
+                    INSERT INTO crawl
+                    (actor_name, source, code, torrent_url,
+                     size_mb, seeds, date_ts, created_at, last_seen)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    actor_name, "onejav", code,
+                    link, 0, 0, 0,
+                    now, now
+                ))
+
+                log("TOOL1", "INSERT", f"{code} inserted")
 
             conn.commit()
 
         except Exception as e:
-            print("Error:", e)
+            log("TOOL1", "ERROR", f"ONEJAV {actor_name}: {str(e)}")
 
     conn.close()
+
 
 # =========================
 # MAIN
 # =========================
 def main():
-    conn = get_conn()
-    actors = conn.execute("SELECT name, source, url FROM actors").fetchall()
-    conn.close()
 
-    threads = []
+    log("TOOL1", "START", "Crawler service started")
 
-    for name, source, url in actors:
-        if source == "ijav":
-            t = threading.Thread(target=crawl_ijav, args=(name, url))
-        else:
-            t = threading.Thread(target=crawl_onejav, args=(name, url))
+    while True:
 
-        t.start()
-        threads.append(t)
+        log("TOOL1", "RUN", "Crawler cycle started")
 
-    for t in threads:
-        t.join()
+        conn = get_conn()
+        actors = conn.execute(
+            "SELECT name, source, url FROM actors"
+        ).fetchall()
+        conn.close()
 
-    print("\n?? TOOL 1 DONE")
+        threads = []
+
+        for name, source, url in actors:
+            if source == "ijav":
+                t = threading.Thread(
+                    target=crawl_ijav,
+                    args=(name, url)
+                )
+            else:
+                t = threading.Thread(
+                    target=crawl_onejav,
+                    args=(name, url)
+                )
+
+            t.start()
+            threads.append(t)
+
+        for t in threads:
+            t.join()
+
+        log("TOOL1", "SLEEP", "Sleeping 12 hours")
+
+        time.sleep(86400)  # 12 ti?ng
+
 
 if __name__ == "__main__":
     main()

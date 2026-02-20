@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Media Control Panel</title>
+    <meta http-equiv="refresh" content="5">
+    <style>
+        body { font-family: monospace; background:#111; color:#0f0; }
+        .box { border:1px solid #333; padding:10px; margin-bottom:20px; }
+        input, select { padding:5px; }
+        button { padding:5px 10px; }
+        table { width:100%; color:#fff; }
+        th, td { padding:4px; }
+    </style>
+</head>
+<body>
+
+<h2>📡 System Logs (Auto refresh 5s)</h2>
+<div class="box" style="height:300px; overflow:auto;">
+    {% for line in logs %}
+        <div>{{ line }}</div>
+    {% endfor %}
+</div>
+
+<h2>🎭 Actors</h2>
+<div class="box">
+    <table>
+        <tr>
+            <th>ID</th><th>Name</th><th>Source</th><th>URL</th>
+        </tr>
+        {% for a in actors %}
+        <tr>
+            <td>{{ a[0] }}</td>
+            <td>{{ a[1] }}</td>
+            <td>{{ a[2] }}</td>
+            <td>{{ a[3] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<h2>➕ Add Actor</h2>
+<div class="box">
+    <form method="POST" action="/add_actor">
+        Name:
+        <input name="name" required>
+
+        Source:
+        <select name="source">
+            <option value="ijav">ijav</option>
+            <option value="onejav">onejav</option>
+        </select>
+
+        URL:
+        <input name="url" required>
+
+        <button type="submit">Add</button>
+    </form>
+</div>
+
+</body>
+</html>
