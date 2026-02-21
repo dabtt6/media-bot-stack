@@ -20,6 +20,85 @@ services:
     networks:
       - media-net
 
+  media-bot:
+    image: python:3.11-slim
+    container_name: media-bot
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install requests beautifulsoup4 &&
+             python runner.py"
+    volumes:
+      - ./media-bot:/app
+      - ./media-bot/data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+      - TZ=Asia/Ho_Chi_Minh
+    depends_on:
+      - qbittorrent
+    networks:
+      - media-net
+
+  qbit-optimizer:
+    image: python:3.11-slim
+    container_name: qbit-optimizer
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install requests &&
+             python qbit_optimizer.py"
+    volumes:
+      - ./media-bot:/app
+      - ./media-bot/data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+      - TZ=Asia/Ho_Chi_Minh
+    depends_on:
+      - qbittorrent
+    networks:
+      - media-net
+
+  movie-agent:
+    image: python:3.11-slim
+    container_name: movie-agent
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install flask &&
+             python movie_agent.py"
+    volumes:
+      - ./movie-agent:/app
+      - /data/movies:/data
+      - ./media-bot/data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "5001:5001"
+    networks:
+      - media-net
+
+  media-panel:
+    image: python:3.11-slim
+    container_name: media-panel
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             python app.py"
+    volumes:
+      - ./media-panel:/app
+      - ./media-bot/data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "5050:5050"
+    networks:
+      - media-net
+
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
