@@ -10,59 +10,62 @@ services:
       - WEBUI_PORT=8080
       - WEBUI_USERNAME=admin
       - WEBUI_PASSWORD=111111
-      - TZ=Asia/Ho_Chi_Minh
       - PUID=1000
       - PGID=1000
+      - TZ=Asia/Ho_Chi_Minh
     volumes:
       - ./qbit-config:/config
       - /data:/data
     networks:
       - media-net
 
+
   media-bot:
     build: ./media-bot
     container_name: media-bot
-    restart: unless-stopped
     command: ["python", "-u", "runner.py"]
+    restart: unless-stopped
     depends_on:
       - qbittorrent
-    volumes:
-      - ./media-bot/data:/app/data
-      - /data:/data
     environment:
       - QBIT_URL=http://qbittorrent:8080
       - QBIT_USER=admin
       - QBIT_PASS=111111
+    volumes:
+      - ./media-bot/data:/app/data
     networks:
       - media-net
+
 
   media-bot-post:
     build: ./media-bot
     container_name: media-bot-post
+    command: ["python", "-u", "tool6_postprocess.py"]
     restart: unless-stopped
-    command: ["python", "-u", "post_processor.py"]
     depends_on:
       - qbittorrent
       - javinizer
-    volumes:
-      - ./media-bot/data:/app/data
-      - /data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - QBIT_URL=http://qbittorrent:8080
       - QBIT_USER=admin
       - QBIT_PASS=111111
+    volumes:
+      - ./media-bot/data:/app/data
+      - /data:/data
     networks:
       - media-net
+
 
   javinizer:
     image: javinizer/javinizer:latest-cli
     container_name: javinizer
+    command: ["tail", "-f", "/dev/null"]
     restart: unless-stopped
     volumes:
       - /data/movies:/data
     networks:
       - media-net
+
 
   jellyfin:
     image: jellyfin/jellyfin:latest
@@ -73,10 +76,9 @@ services:
     volumes:
       - ./jellyfin-config:/config
       - /data/movies:/media
-    environment:
-      - TZ=Asia/Ho_Chi_Minh
     networks:
       - media-net
+
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -86,9 +88,9 @@ services:
       - "9000:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./portainer-data:/data
     networks:
       - media-net
+
 
 networks:
   media-net:
