@@ -43,11 +43,18 @@ services:
     restart: unless-stopped
     volumes:
       - /data:/data
-      - /media_stack/javinizer-config:/root/.local/share/javinizer
-      - /media_stack/loop.ps1:/loop.ps1
+      - /docker/media-stack/javinizer-config:/root/.local/share/javinizer
     networks:
       - media-net
-    command: ["pwsh", "-File", "/loop.ps1"]
+    command:
+      - pwsh
+      - -Command
+      - >
+        Import-Module Javinizer;
+        while ($$true) {
+          Javinizer -Path '/data' -DestinationPath '/data' -Recurse;
+          Start-Sleep -Seconds 300
+        }
 
 
   jellyfin:
