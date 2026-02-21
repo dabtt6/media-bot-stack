@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   qbittorrent:
@@ -21,18 +19,6 @@ services:
     networks:
       - media-net
 
-  movie-agent:
-    build: ./movie-agent
-    container_name: movie-agent
-    restart: unless-stopped
-    ports:
-      - "5001:5001"
-    volumes:
-      - /data/movies:/data
-      - ./media-bot/data:/app/data
-    networks:
-      - media-net
-
   media-bot:
     build: ./media-bot
     container_name: media-bot
@@ -40,7 +26,6 @@ services:
     restart: unless-stopped
     depends_on:
       - qbittorrent
-      - movie-agent
     volumes:
       - ./media-bot/data:/app/data
     environment:
@@ -66,6 +51,18 @@ services:
     networks:
       - media-net
 
+  movie-agent:
+    build: ./movie-agent
+    container_name: movie-agent
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - /data/movies:/data
+      - ./media-bot/data:/app/data
+    networks:
+      - media-net
+
   media-panel:
     build: ./media-panel
     container_name: media-panel
@@ -77,6 +74,22 @@ services:
     networks:
       - media-net
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - media-net
+
 networks:
   media-net:
     driver: bridge
+
+volumes:
+  portainer_data:
