@@ -11,8 +11,8 @@ QBIT_PASS = os.getenv("QBIT_PASS")
 
 SESSION = requests.Session()
 
-CHECK_INTERVAL = 300
-MIN_SPEED = 200 * 1024
+CHECK_INTERVAL = 180
+MIN_SPEED = 300 * 1024
 MAX_ACTIVE = 3
 
 
@@ -65,6 +65,14 @@ def resume(hash_value):
     )
 
 
+# ================= BLOCK SEEDING =================
+def block_seeding(torrents):
+    for t in torrents:
+        if t["progress"] == 1 and t["state"] in ("uploading", "stalledUP"):
+            pause(t["hash"])
+            log("TOOL5", "SEED-BLOCK", f"Paused seeding {t['name']}")
+
+
 # ================= SMART SELECT =================
 def select_best(torrents):
 
@@ -76,9 +84,6 @@ def select_best(torrents):
     if not candidates:
         return []
 
-    # Uu tiên:
-    # 1. Download speed cao
-    # 2. Progress th?p (d? tránh stuck 99%)
     candidates.sort(
         key=lambda t: (
             t["dlspeed"],
@@ -107,28 +112,30 @@ def main():
             time.sleep(CHECK_INTERVAL)
             continue
 
+        # ?? Ch?n seeding tru?c
+        block_seeding(torrents)
+
         active = [
             t for t in torrents
             if t["state"] == "downloading"
         ]
 
         selected = select_best(torrents)
-
         selected_hashes = {t["hash"] for t in selected}
 
-        # Pause torrents không n?m trong top
+        # Pause torrent không n?m trong top
         for t in active:
             if t["hash"] not in selected_hashes:
                 pause(t["hash"])
                 log("TOOL5", "PAUSE", t["name"])
 
-        # Resume torrents du?c ch?n
+        # Resume torrent du?c ch?n
         for t in selected:
             if t["state"] != "downloading":
                 resume(t["hash"])
                 log("TOOL5", "RESUME", t["name"])
 
-        # Log tr?ng thái
+        # Log tr?ng thái dang ch?y
         for t in selected:
             speed_kb = round(t["dlspeed"] / 1024, 1)
             log("TOOL5", "RUN",
