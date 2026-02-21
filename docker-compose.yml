@@ -16,61 +16,7 @@ services:
     volumes:
       - ./qbit-config:/config
       - /data:/data
-    networks:
-      - media-net
-
-  media-bot:
-    build: ./media-bot
-    container_name: media-bot
-    command: ["python", "-u", "runner.py"]
-    restart: unless-stopped
-    depends_on:
-      - qbittorrent
-    volumes:
-      - ./media-bot/data:/app/data
-    environment:
-      - QBIT_URL=http://qbittorrent:8080
-      - QBIT_USER=admin
-      - QBIT_PASS=111111
-    networks:
-      - media-net
-
-  qbit-optimizer:
-    build: ./media-bot
-    container_name: qbit-optimizer
-    command: ["python", "-u", "qbit_optimizer.py"]
-    restart: unless-stopped
-    depends_on:
-      - qbittorrent
-    volumes:
-      - ./media-bot/data:/app/data
-    environment:
-      - QBIT_URL=http://qbittorrent:8080
-      - QBIT_USER=admin
-      - QBIT_PASS=111111
-    networks:
-      - media-net
-
-  movie-agent:
-    build: ./movie-agent
-    container_name: movie-agent
-    restart: unless-stopped
-    ports:
-      - "5001:5001"
-    volumes:
-      - /data/movies:/data
-      - ./media-bot/data:/app/data
-    networks:
-      - media-net
-
-  media-panel:
-    build: ./media-panel
-    container_name: media-panel
-    restart: unless-stopped
-    ports:
-      - "5050:5050"
-    volumes:
-      - ./media-bot/data:/app/data
+      - /etc/localtime:/etc/localtime:ro
     networks:
       - media-net
 
@@ -84,17 +30,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
-    networks:
-      - media-net
-
-  javinizer:
-    image: javinizer/javinizer:latest
-    container_name: javinizer
-    restart: unless-stopped
-    ports:
-      - "8600:8600"
-    volumes:
-      - /data/movies:/data
+      - /etc/localtime:/etc/localtime:ro
     networks:
       - media-net
 
