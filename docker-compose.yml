@@ -43,13 +43,24 @@ services:
     command: ["python", "-u", "post_processor.py"]
     depends_on:
       - qbittorrent
+      - javinizer
     volumes:
       - ./media-bot/data:/app/data
       - /data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - QBIT_URL=http://qbittorrent:8080
       - QBIT_USER=admin
       - QBIT_PASS=111111
+    networks:
+      - media-net
+
+  javinizer:
+    image: javinizer/javinizer:latest-cli
+    container_name: javinizer
+    restart: unless-stopped
+    volumes:
+      - /data/movies:/data
     networks:
       - media-net
 

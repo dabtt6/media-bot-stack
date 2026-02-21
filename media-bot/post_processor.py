@@ -5,6 +5,7 @@ import requests
 import os
 import shutil
 import time
+import subprocess
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -61,6 +62,20 @@ def find_video(folder):
     return biggest
 
 
+# ================= CALL JAVINIZER =================
+def run_javinizer(file_path):
+    print(f"TOOL6 | Running Javinizer for {file_path}")
+
+    subprocess.run([
+        "docker", "exec", "javinizer",
+        "pwsh", "-Command",
+        f"Import-Module Javinizer; "
+        f"Javinizer -Path '{file_path}' "
+        f"-DestinationPath '/data' "
+        f"-Update -Move -WriteNfo -DownloadImages"
+    ])
+
+
 # ================= MAIN PROCESS =================
 def process_completed():
 
@@ -113,8 +128,12 @@ def process_completed():
 
         try:
             shutil.move(video, dest_file)
-            print(f"TOOL6 | Moved {code} → {dest_file}")
+            print(f"TOOL6 | Moved {code} ? {dest_file}")
 
+            # Run Javinizer only for this file
+            run_javinizer(dest_file)
+
+            # Update DB
             conn = get_conn()
             conn.execute("""
                 UPDATE queuedqbit
@@ -124,7 +143,7 @@ def process_completed():
             conn.commit()
             conn.close()
 
-            # Optional: remove torrent from qbit
+            # Optional: remove torrent kh?i qBit
             SESSION.post(
                 QBIT_URL + "/api/v2/torrents/delete",
                 data={"hashes": hash_value, "deleteFiles": "false"}
