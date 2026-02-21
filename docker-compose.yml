@@ -40,7 +40,7 @@ services:
   media-bot-post:
     build: ./media-bot
     container_name: media-bot-post
-    command: ["python", "-u", "tool6_postprocess.py"]
+    command: ["python", "-u", "post_process.py"]
     restart: unless-stopped
     depends_on:
       - qbittorrent
