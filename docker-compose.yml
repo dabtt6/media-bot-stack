@@ -20,14 +20,29 @@ services:
     networks:
       - media-net
 
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - ./jellyfin-config:/config
+      - /data/movies:/media
+      - /etc/localtime:/etc/localtime:ro
+    devices:
+      - /dev/dri:/dev/dri
+    networks:
+      - media-net
+
   media-bot:
     image: python:3.11-slim
     container_name: media-bot
     restart: unless-stopped
     working_dir: /app
-    command: >
-      sh -c "pip install requests beautifulsoup4 &&
-             python runner.py"
+    command: sh -c "pip install requests beautifulsoup4 && python runner.py"
     volumes:
       - ./media-bot:/app
       - ./media-bot/data:/app/data
@@ -47,9 +62,7 @@ services:
     container_name: qbit-optimizer
     restart: unless-stopped
     working_dir: /app
-    command: >
-      sh -c "pip install requests &&
-             python qbit_optimizer.py"
+    command: sh -c "pip install requests && python qbit_optimizer.py"
     volumes:
       - ./media-bot:/app
       - ./media-bot/data:/app/data
@@ -61,41 +74,6 @@ services:
       - TZ=Asia/Ho_Chi_Minh
     depends_on:
       - qbittorrent
-    networks:
-      - media-net
-
-  movie-agent:
-    image: python:3.11-slim
-    container_name: movie-agent
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "pip install flask &&
-             python movie_agent.py"
-    volumes:
-      - ./movie-agent:/app
-      - /data/movies:/data
-      - ./media-bot/data:/app/data
-      - /etc/localtime:/etc/localtime:ro
-    ports:
-      - "5001:5001"
-    networks:
-      - media-net
-
-  media-panel:
-    image: python:3.11-slim
-    container_name: media-panel
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "pip install -r requirements.txt &&
-             python app.py"
-    volumes:
-      - ./media-panel:/app
-      - ./media-bot/data:/app/data
-      - /etc/localtime:/etc/localtime:ro
-    ports:
-      - "5050:5050"
     networks:
       - media-net
 
