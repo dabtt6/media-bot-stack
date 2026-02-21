@@ -8,19 +8,18 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
     environment:
-      - WEBUI_PORT=8080
-      - WEBUI_USERNAME=admin
-      - WEBUI_PASSWORD=111111
       - PUID=1000
       - PGID=1000
       - TZ=Asia/Ho_Chi_Minh
+      - WEBUI_PORT=8080
     volumes:
       - ./qbit-config:/config
       - /data:/data
     networks:
       - media-net
-
 
   movie-agent:
     build: ./movie-agent
@@ -30,10 +29,9 @@ services:
       - "5001:5001"
     volumes:
       - /data/movies:/data
-      - ./media-bot/data:/app/data 
+      - ./media-bot/data:/app/data
     networks:
       - media-net
-
 
   media-bot:
     build: ./media-bot
@@ -47,30 +45,14 @@ services:
       - ./media-bot/data:/app/data
     environment:
       - QBIT_URL=http://qbittorrent:8080
-    networks:
-      - media-net
-
-
-  media-bot-worker:
-    build: ./media-bot
-    container_name: media-bot-worker
-    command: ["python", "-u", "qbit_engine_daemon.py"]
-    restart: unless-stopped
-    depends_on:
-      - qbittorrent
-    volumes:
-      - ./media-bot/data:/app/data
-    environment:
-      - QBIT_URL=http://qbittorrent:8080
       - QBIT_USER=admin
       - QBIT_PASS=111111
     networks:
       - media-net
 
-
-  media-bot-optimizer:
+  qbit-optimizer:
     build: ./media-bot
-    container_name: media-bot-optimizer
+    container_name: qbit-optimizer
     command: ["python", "-u", "qbit_optimizer.py"]
     restart: unless-stopped
     depends_on:
