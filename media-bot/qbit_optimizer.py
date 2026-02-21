@@ -24,7 +24,14 @@ def login():
             data={"username": QBIT_USER, "password": QBIT_PASS},
             timeout=10
         )
-        return r.text == "Ok."
+
+        if r.status_code == 200 and "Ok" in r.text:
+            log("TOOL5", "INFO", "qBit connected")
+            return True
+
+        log("TOOL5", "WARNING", f"Login failed: {r.text}")
+        return False
+
     except Exception as e:
         log("TOOL5", "ERROR", f"Login error: {str(e)}")
         return False
