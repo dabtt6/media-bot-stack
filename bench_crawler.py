@@ -5,29 +5,48 @@ import aiohttp
 import time
 import random
 
-BASE = "https://ijavtorrent.com/actress/remu-suzumori-10857"
+# ================= CONFIG =================
+
+ACTORS = [
+    "remu-suzumori-10857",
+    "yuuka-minase-2310",
+    "rei-kamiki-11034",
+    "mirei-shinonome-11890",
+    "mika-azuma-13345",
+    "sayuri-hayama-9981",
+    "melody-marks-10293",
+    "nakamori-nanami-11233",
+    "shidou-rui-11201",
+    "fukuda-yua-11302",
+]
+
 MAX_PAGE = 10
 
 MIN_CONCURRENT = 30
 MAX_CONCURRENT = 80
 START_CONCURRENT = 50
 
-BATCH_SIZE = 200
 TARGET_SUCCESS = 0.95
+LOW_THRESHOLD = 0.80
+
+BATCH_SLEEP = 5
 
 concurrent = START_CONCURRENT
 
+# ================= URL BUILD =================
 
 def build_urls():
     urls = []
-    for page in range(1, MAX_PAGE + 1):
-        if page == 1:
-            url = BASE
-        else:
-            url = BASE + "?page=" + str(page)
-        urls.append(url)
+    for actor in ACTORS:
+        base = f"https://ijavtorrent.com/actress/{actor}"
+        for page in range(1, MAX_PAGE + 1):
+            if page == 1:
+                urls.append(base)
+            else:
+                urls.append(base + f"?page={page}")
     return urls
 
+# ================= FETCH =================
 
 async def fetch(session, url):
     try:
@@ -37,13 +56,13 @@ async def fetch(session, url):
     except:
         return 0
 
+# ================= RUN BATCH =================
 
 async def run_batch():
 
     global concurrent
 
     urls = build_urls()
-    urls = urls * (BATCH_SIZE // len(urls))
 
     connector = aiohttp.TCPConnector(limit=concurrent, ssl=False)
     timeout = aiohttp.ClientTimeout(total=15)
@@ -63,27 +82,29 @@ async def run_batch():
         success = results.count(200)
         rate = success / len(results)
 
-        print(f"\nConcurrent: {concurrent}")
-        print(f"Success: {success}/{len(results)} ({round(rate*100,2)}%)")
+        print("\n==========================")
+        print(f"Concurrent: {concurrent}")
+        print(f"Total Requests: {len(results)}")
+        print(f"Success: {success} ({round(rate*100,2)}%)")
         print("Time:", round(end-start, 2))
         print("Req/sec:", round(len(results)/(end-start), 2))
 
-        # Adaptive logic
+        # ===== Adaptive Logic =====
         if rate > TARGET_SUCCESS and concurrent < MAX_CONCURRENT:
             concurrent += 5
             print("? Increasing concurrency")
-        elif rate < 0.8 and concurrent > MIN_CONCURRENT:
+        elif rate < LOW_THRESHOLD and concurrent > MIN_CONCURRENT:
             concurrent -= 10
             print("? Decreasing concurrency")
 
         concurrent = max(MIN_CONCURRENT, min(MAX_CONCURRENT, concurrent))
 
+# ================= MAIN LOOP =================
 
 async def main():
-    print("Adaptive crawler started")
+    print("Multi-Actor Adaptive Crawler Started")
     while True:
         await run_batch()
-        await asyncio.sleep(5)
-
+        await asyncio.sleep(BATCH_SLEEP)
 
 asyncio.run(main())
