@@ -11,7 +11,7 @@ QBIT_PASS = os.getenv("QBIT_PASS")
 
 SESSION = requests.Session()
 
-CHECK_INTERVAL = 180
+CHECK_INTERVAL = 10
 MIN_SPEED = 300 * 1024
 MAX_ACTIVE = 3
 
