@@ -59,12 +59,18 @@ services:
   javinizer:
     image: javinizer/javinizer:latest-cli
     container_name: javinizer
-    command: ["tail", "-f", "/dev/null"]
     restart: unless-stopped
     volumes:
-      - /data/movies:/data
+      - /data:/data
     networks:
       - media-net
+    command: >
+      pwsh -Command "
+      Import-Module Javinizer;
+      while ($true) {
+        Javinizer -Path '/data' -DestinationPath '/data' -Recurse;
+        Start-Sleep -Seconds 300
+      }"
 
 
   jellyfin:
