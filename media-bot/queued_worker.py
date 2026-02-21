@@ -92,49 +92,14 @@ def reset_stuck():
 
 
 # =========================
-# SYNC WITH AGENT (SELF-HEALING)
-# =========================
-def sync_with_agent():
-    conn = get_conn()
-    c = conn.cursor()
-
-    agent_codes = set(
-        r[0] for r in c.execute("SELECT code FROM agent_snapshot")
-    )
-
-    rows = c.execute("""
-        SELECT id, code, status
-        FROM queuedqbit
-        WHERE status IN ('new','adding','added','error')
-    """).fetchall()
-
-    for row_id, code, status in rows:
-        if code in agent_codes:
-            c.execute("""
-                UPDATE queuedqbit
-                SET status='existed'
-                WHERE id=?
-            """, (row_id,))
-            logger.info(f"Synced to existed: {code}")
-
-    conn.commit()
-    conn.close()
-
-
-# =========================
-# BUILD QUEUE (Tool2 logic)
+# BUILD QUEUE
 # =========================
 def build_queue():
     conn = get_conn()
     c = conn.cursor()
 
-    agent_codes = set(
-        r[0] for r in c.execute("SELECT code FROM agent_snapshot")
-    )
-
     codes = c.execute("""
-        SELECT DISTINCT code
-        FROM crawl
+        SELECT DISTINCT code FROM crawl
         WHERE code IS NOT NULL
     """).fetchall()
 
@@ -146,33 +111,21 @@ def build_queue():
         ).fetchone()
 
         if existing:
-            if code in agent_codes and existing[0] != "existed":
-                c.execute("""
-                    UPDATE queuedqbit
-                    SET status='existed'
-                    WHERE code=?
-                """, (code,))
-                logger.info(f"Updated to existed: {code}")
             continue
 
-        rows = c.execute("""
+        row = c.execute("""
             SELECT actor_name, torrent_url,
-                   size_mb, seeds, date_ts
+                   size_mb, seeds
             FROM crawl
             WHERE code=?
-        """, (code,)).fetchall()
+            ORDER BY seeds DESC, size_mb DESC
+            LIMIT 1
+        """, (code,)).fetchone()
 
-        if not rows:
+        if not row:
             continue
 
-        best = max(rows, key=lambda r: (
-            r[3] or 0,
-            r[4] or 0,
-            r[2] or 0
-        ))
-
-        actor, url, size_mb, seeds, _ = best
-        status = "existed" if code in agent_codes else "new"
+        actor, url, size_mb, seeds = row
 
         c.execute("""
             INSERT INTO queuedqbit
@@ -185,20 +138,21 @@ def build_queue():
             url,
             size_mb,
             seeds,
-            status,
+            "new",
             datetime.now().isoformat()
         ))
 
-        logger.info(f"Queued {code} ({status})")
+        logger.info(f"Queued {code}")
 
     conn.commit()
     conn.close()
 
 
 # =========================
-# ADD TORRENT (Tool4 logic)
+# ADD TORRENT + SAVE HASH
 # =========================
 def add_torrent():
+
     conn = get_conn()
     c = conn.cursor()
 
@@ -229,16 +183,42 @@ def add_torrent():
             timeout=30
         )
 
+        time.sleep(2)
+
+        torrents = SESSION.get(
+            QBIT_URL + "/api/v2/torrents/info",
+            timeout=20
+        ).json()
+
+        matched = None
+        for t in torrents:
+            if code.upper() in t["name"].upper():
+                matched = t
+                break
+
+        if not matched:
+            raise Exception("Cannot find torrent in qBit after add")
+
         c.execute("""
             UPDATE queuedqbit
             SET status='added',
                 added_at=?,
-                retry_count=0
+                retry_count=0,
+                hash=?,
+                qbit_name=?,
+                save_path=?
             WHERE id=?
-        """, (datetime.now().isoformat(), row_id))
+        """, (
+            datetime.now().isoformat(),
+            matched["hash"],
+            matched["name"],
+            matched["save_path"],
+            row_id
+        ))
 
         conn.commit()
-        logger.info(f"Added {code}")
+
+        logger.info(f"Added {code} | hash saved")
 
     except Exception as e:
         c.execute("""
@@ -256,9 +236,10 @@ def add_torrent():
 
 
 # =========================
-# MONITOR COMPLETE (Tool5 logic)
+# MONITOR COMPLETE (HASH BASED)
 # =========================
 def monitor_complete():
+
     try:
         torrents = SESSION.get(
             QBIT_URL + "/api/v2/torrents/info",
@@ -267,22 +248,25 @@ def monitor_complete():
     except:
         return
 
-    completed = {t["name"] for t in torrents if t["progress"] == 1.0}
+    completed_hash = {
+        t["hash"] for t in torrents if t["progress"] == 1.0
+    }
 
-    if not completed:
+    if not completed_hash:
         return
 
     conn = get_conn()
     c = conn.cursor()
 
     rows = c.execute("""
-        SELECT id, code
+        SELECT id, code, hash
         FROM queuedqbit
         WHERE status='added'
+          AND hash IS NOT NULL
     """).fetchall()
 
-    for row_id, code in rows:
-        if code in completed:
+    for row_id, code, hash_value in rows:
+        if hash_value in completed_hash:
             c.execute("""
                 UPDATE queuedqbit
                 SET status='completed',
@@ -307,7 +291,6 @@ def main():
 
     while True:
         try:
-            sync_with_agent()
             build_queue()
             add_torrent()
             monitor_complete()
