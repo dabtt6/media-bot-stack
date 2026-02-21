@@ -1,47 +1,54 @@
-import requests
+# -*- coding: utf-8 -*-
+
+import asyncio
+import aiohttp
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 BASE = "https://ijavtorrent.com/actress/remu-suzumori-10857"
 
 MAX_PAGE = 10
-THREADS = 50
 REQ_PER_PAGE = 100
-
-session = requests.Session()
-session.headers.update({"User-Agent": "Mozilla/5.0"})
+CONCURRENT = 200
 
 def build_url(page):
     if page == 1:
         return BASE
-    return f"{BASE}?page={page}"
+    return BASE + "?page=" + str(page)
 
-def fetch(url):
+urls = []
+for page in range(1, MAX_PAGE + 1):
+    for _ in range(REQ_PER_PAGE):
+        urls.append(build_url(page))
+
+async def fetch(session, url):
     try:
-        r = session.get(url, timeout=10)
-        return r.status_code
+        async with session.get(url, timeout=10) as resp:
+            return resp.status
     except:
         return 0
 
-urls = []
+async def run():
+    connector = aiohttp.TCPConnector(limit=CONCURRENT, ssl=False)
+    timeout = aiohttp.ClientTimeout(total=15)
 
-for page in range(1, MAX_PAGE + 1):
-    page_url = build_url(page)
-    for _ in range(REQ_PER_PAGE):
-        urls.append(page_url)
+    async with aiohttp.ClientSession(
+        connector=connector,
+        timeout=timeout,
+        headers={"User-Agent": "Mozilla/5.0"}
+    ) as session:
 
-start = time.time()
+        tasks = [fetch(session, url) for url in urls]
 
-with ThreadPoolExecutor(max_workers=THREADS) as executor:
-    results = list(executor.map(fetch, urls))
+        start = time.time()
+        results = await asyncio.gather(*tasks)
+        end = time.time()
 
-end = time.time()
+        success = results.count(200)
 
-success = results.count(200)
+        print("Concurrent:", CONCURRENT)
+        print("Total:", len(urls))
+        print("Success:", success)
+        print("Time:", round(end-start, 2))
+        print("Req/sec:", round(len(urls)/(end-start), 2))
 
-print("Pages:", MAX_PAGE)
-print("Threads:", THREADS)
-print("Total Requests:", len(urls))
-print("Success:", success)
-print("Time:", round(end - start, 2))
-print("Req/sec:", round(len(urls) / (end - start), 2))
+asyncio.run(run())
