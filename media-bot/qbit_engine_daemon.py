@@ -55,6 +55,7 @@ def get_conn():
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
+
 # =========================
 # LOGIN QBIT
 # =========================
@@ -75,6 +76,7 @@ def login():
         logger.warning("Waiting for qBit...")
         time.sleep(5)
 
+
 # =========================
 # RESET STUCK
 # =========================
@@ -87,6 +89,37 @@ def reset_stuck():
     """)
     conn.commit()
     conn.close()
+
+
+# =========================
+# SYNC WITH AGENT (SELF-HEALING)
+# =========================
+def sync_with_agent():
+    conn = get_conn()
+    c = conn.cursor()
+
+    agent_codes = set(
+        r[0] for r in c.execute("SELECT code FROM agent_snapshot")
+    )
+
+    rows = c.execute("""
+        SELECT id, code, status
+        FROM queuedqbit
+        WHERE status IN ('new','adding','added','error')
+    """).fetchall()
+
+    for row_id, code, status in rows:
+        if code in agent_codes:
+            c.execute("""
+                UPDATE queuedqbit
+                SET status='existed'
+                WHERE id=?
+            """, (row_id,))
+            logger.info(f"Synced to existed: {code}")
+
+    conn.commit()
+    conn.close()
+
 
 # =========================
 # BUILD QUEUE (Tool2 logic)
@@ -107,10 +140,19 @@ def build_queue():
 
     for (code,) in codes:
 
-        if c.execute(
-            "SELECT 1 FROM queuedqbit WHERE code=?",
+        existing = c.execute(
+            "SELECT status FROM queuedqbit WHERE code=?",
             (code,)
-        ).fetchone():
+        ).fetchone()
+
+        if existing:
+            if code in agent_codes and existing[0] != "existed":
+                c.execute("""
+                    UPDATE queuedqbit
+                    SET status='existed'
+                    WHERE code=?
+                """, (code,))
+                logger.info(f"Updated to existed: {code}")
             continue
 
         rows = c.execute("""
@@ -151,6 +193,7 @@ def build_queue():
 
     conn.commit()
     conn.close()
+
 
 # =========================
 # ADD TORRENT (Tool4 logic)
@@ -211,6 +254,7 @@ def add_torrent():
 
     conn.close()
 
+
 # =========================
 # MONITOR COMPLETE (Tool5 logic)
 # =========================
@@ -251,6 +295,7 @@ def monitor_complete():
     conn.commit()
     conn.close()
 
+
 # =========================
 # MAIN LOOP
 # =========================
@@ -262,6 +307,7 @@ def main():
 
     while True:
         try:
+            sync_with_agent()
             build_queue()
             add_torrent()
             monitor_complete()
@@ -270,6 +316,7 @@ def main():
             login()
 
         time.sleep(SLEEP_TIME)
+
 
 if __name__ == "__main__":
     main()
