@@ -6,17 +6,50 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-      - "6881:6881"
-      - "6881:6881/udp"
     environment:
+      - WEBUI_PORT=8080
+      - WEBUI_USERNAME=admin
+      - WEBUI_PASSWORD=111111
+      - TZ=Asia/Ho_Chi_Minh
       - PUID=1000
       - PGID=1000
-      - TZ=Asia/Ho_Chi_Minh
-      - WEBUI_PORT=8080
     volumes:
       - ./qbit-config:/config
       - /data:/data
-      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - media-net
+
+  media-bot:
+    build: ./media-bot
+    container_name: media-bot
+    restart: unless-stopped
+    command: ["python", "-u", "runner.py"]
+    depends_on:
+      - qbittorrent
+    volumes:
+      - ./media-bot/data:/app/data
+      - /data:/data
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+    networks:
+      - media-net
+
+  media-bot-post:
+    build: ./media-bot
+    container_name: media-bot-post
+    restart: unless-stopped
+    command: ["python", "-u", "post_processor.py"]
+    depends_on:
+      - qbittorrent
+    volumes:
+      - ./media-bot/data:/app/data
+      - /data:/data
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
     networks:
       - media-net
 
@@ -26,54 +59,11 @@ services:
     restart: unless-stopped
     ports:
       - "8096:8096"
-    environment:
-      - TZ=Asia/Ho_Chi_Minh
     volumes:
       - ./jellyfin-config:/config
       - /data/movies:/media
-      - /etc/localtime:/etc/localtime:ro
-    devices:
-      - /dev/dri:/dev/dri
-    networks:
-      - media-net
-
-  media-bot:
-    image: python:3.11-slim
-    container_name: media-bot
-    restart: unless-stopped
-    working_dir: /app
-    command: sh -c "pip install requests beautifulsoup4 && python runner.py"
-    volumes:
-      - ./media-bot:/app
-      - ./media-bot/data:/app/data
-      - /etc/localtime:/etc/localtime:ro
     environment:
-      - QBIT_URL=http://qbittorrent:8080
-      - QBIT_USER=admin
-      - QBIT_PASS=111111
       - TZ=Asia/Ho_Chi_Minh
-    depends_on:
-      - qbittorrent
-    networks:
-      - media-net
-
-  qbit-optimizer:
-    image: python:3.11-slim
-    container_name: qbit-optimizer
-    restart: unless-stopped
-    working_dir: /app
-    command: sh -c "pip install requests && python qbit_optimizer.py"
-    volumes:
-      - ./media-bot:/app
-      - ./media-bot/data:/app/data
-      - /etc/localtime:/etc/localtime:ro
-    environment:
-      - QBIT_URL=http://qbittorrent:8080
-      - QBIT_USER=admin
-      - QBIT_PASS=111111
-      - TZ=Asia/Ho_Chi_Minh
-    depends_on:
-      - qbittorrent
     networks:
       - media-net
 
@@ -83,17 +73,12 @@ services:
     restart: unless-stopped
     ports:
       - "9000:9000"
-      - "9443:9443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-      - /etc/localtime:/etc/localtime:ro
+      - ./portainer-data:/data
     networks:
       - media-net
 
 networks:
   media-net:
     driver: bridge
-
-volumes:
-  portainer_data:
