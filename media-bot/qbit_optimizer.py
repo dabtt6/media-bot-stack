@@ -11,12 +11,9 @@ QBIT_PASS = os.getenv("QBIT_PASS")
 
 SESSION = requests.Session()
 
-CHECK_INTERVAL = 300      # 5 minutes
-EVAL_DELAY = 10           # wait 10 seconds after resume-all
-MIN_SPEED = 200 * 1024    # 200 KB/s
+CHECK_INTERVAL = 300
+MIN_SPEED = 200 * 1024
 MAX_ACTIVE = 3
-
-progress_map = {}
 
 
 # ================= LOGIN =================
@@ -48,55 +45,45 @@ def get_torrents():
 
 # ================= CONTROL =================
 def pause(hash_value):
-    try:
-        SESSION.post(
-            f"{QBIT_URL}/api/v2/torrents/pause",
-            data={"hashes": hash_value}
-        )
-    except:
-        pass
+    SESSION.post(
+        f"{QBIT_URL}/api/v2/torrents/pause",
+        data={"hashes": hash_value}
+    )
 
 
 def resume(hash_value):
-    try:
-        SESSION.post(
-            f"{QBIT_URL}/api/v2/torrents/resume",
-            data={"hashes": hash_value}
-        )
-    except:
-        pass
+    SESSION.post(
+        f"{QBIT_URL}/api/v2/torrents/resume",
+        data={"hashes": hash_value}
+    )
 
 
-# ================= SELECT LOGIC =================
-def select_torrents(torrents):
+# ================= SMART SELECT =================
+def select_best(torrents):
 
-    # only incomplete torrents
-    candidates = [t for t in torrents if t["progress"] < 1]
+    candidates = [
+        t for t in torrents
+        if t["progress"] < 1
+    ]
 
     if not candidates:
         return []
 
-    # sort by download speed descending
-    candidates.sort(key=lambda x: x["dlspeed"], reverse=True)
+    # Uu tiên:
+    # 1. Download speed cao
+    # 2. Progress th?p (d? tránh stuck 99%)
+    candidates.sort(
+        key=lambda t: (
+            t["dlspeed"],
+            -t["progress"]
+        ),
+        reverse=True
+    )
 
-    # torrents that meet speed requirement
-    good = [t for t in candidates if t["dlspeed"] >= MIN_SPEED]
-
-    if len(good) >= MAX_ACTIVE:
-        log("TOOL5", "MODE", "Using 3 good torrents")
-        return good[:MAX_ACTIVE]
-
-    if good:
-        remaining = MAX_ACTIVE - len(good)
-        others = [t for t in candidates if t not in good]
-        log("TOOL5", "MODE", "Mixed good + fastest others")
-        return good + others[:remaining]
-
-    log("TOOL5", "MODE", "All fail - using fastest 3")
     return candidates[:MAX_ACTIVE]
 
 
-# ================= MAIN LOOP =================
+# ================= MAIN =================
 def main():
 
     log("TOOL5", "START", "Optimizer started")
@@ -109,57 +96,41 @@ def main():
 
         torrents = get_torrents()
 
-        # STEP 1: Resume all incomplete torrents for evaluation
-        for t in torrents:
-            if t["progress"] < 1:
-                resume(t["hash"])
-
-        log("TOOL5", "CHECK", "Resume all for evaluation")
-
-        # STEP 2: wait for speed update
-        time.sleep(EVAL_DELAY)
-
-        torrents = get_torrents()
-
-        selected = select_torrents(torrents)
-
-        if not selected:
-            log("TOOL5", "IDLE", "No active torrents")
+        if not torrents:
             time.sleep(CHECK_INTERVAL)
             continue
 
+        active = [
+            t for t in torrents
+            if t["state"] == "downloading"
+        ]
+
+        selected = select_best(torrents)
+
         selected_hashes = {t["hash"] for t in selected}
 
-        # STEP 3: Pause non-selected torrents
-        for t in torrents:
-            if t["progress"] < 1 and t["hash"] not in selected_hashes:
+        # Pause torrents không n?m trong top
+        for t in active:
+            if t["hash"] not in selected_hashes:
                 pause(t["hash"])
+                log("TOOL5", "PAUSE", t["name"])
 
-        # STEP 4: Record progress baseline
+        # Resume torrents du?c ch?n
         for t in selected:
-            progress_map[t["hash"]] = t["progress"]
+            if t["state"] != "downloading":
+                resume(t["hash"])
+                log("TOOL5", "RESUME", t["name"])
+
+        # Log tr?ng thái
+        for t in selected:
             speed_kb = round(t["dlspeed"] / 1024, 1)
-            log("TOOL5", "RUN", f"{t['name']} {speed_kb} KB/s")
+            log("TOOL5", "RUN",
+                f"{t['name']} {speed_kb} KB/s")
 
-        log("TOOL5", "SLEEP", "Monitoring 5 minutes")
+        log("TOOL5", "SLEEP",
+            f"Monitoring {CHECK_INTERVAL//60} minutes")
+
         time.sleep(CHECK_INTERVAL)
-
-        # STEP 5: Check for stuck torrents
-        torrents = get_torrents()
-
-        for t in torrents:
-
-            if t["hash"] in selected_hashes:
-
-                old_progress = progress_map.get(t["hash"], 0)
-                new_progress = t["progress"]
-
-                if new_progress <= old_progress:
-                    log("TOOL5", "SWAP",
-                        f"{t['name']} no progress - swapping")
-                    pause(t["hash"])
-
-        log("TOOL5", "CYCLE", "Re-evaluating")
 
 
 if __name__ == "__main__":
