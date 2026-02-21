@@ -43,10 +43,11 @@ services:
     restart: unless-stopped
     volumes:
       - /data:/data
-      - ./javinizer-config:/root/.local/share/javinizer
+      - /media_stack/javinizer-config:/root/.local/share/javinizer
+      - /media_stack/loop.ps1:/loop.ps1
     networks:
       - media-net
-    command: ["pwsh", "/loop.ps1"]
+    command: ["pwsh", "-File", "/loop.ps1"]
 
 
   jellyfin:
