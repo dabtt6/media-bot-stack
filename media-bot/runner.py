@@ -1,34 +1,93 @@
 # -*- coding: utf-8 -*-
 
+import subprocess
+import threading
 import time
 import traceback
+import logging
+from logging.handlers import RotatingFileHandler
 
-import crawler_engine_pro_final
-import queue_engine
+CRAWL_INTERVAL = 86400  # 24h
 
-INTERVAL = 86400
+# =========================
+# LOGGING
+# =========================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | MASTER | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
-def log(msg):
-    print(msg, flush=True)
+logger = logging.getLogger("MASTER")
 
-def safe_run(name, func):
-    log(f"\n===== {name} START =====")
-    try:
-        func()
-        log(f"===== {name} END =====")
-    except Exception as e:
-        log(f"ERROR in {name}: {e}")
-        traceback.print_exc()
 
-def main():
-    log("MASTER LOOP STARTED")
+# =========================
+# SAFE PROCESS RUNNER
+# =========================
+def run_process(name, script):
 
     while True:
-        safe_run("TOOL 1 - CRAWLER", crawler_engine_pro_final.main)
-        safe_run("TOOL 2 - BUILD QUEUE", queue_engine.build_queue)
+        try:
+            logger.info(f"{name} STARTED")
 
-        log(f"Sleeping {INTERVAL} seconds...\n")
-        time.sleep(INTERVAL)
+            process = subprocess.Popen(
+                ["python", script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+
+            for line in process.stdout:
+                print(line.rstrip())
+
+            process.wait()
+
+            logger.error(f"{name} STOPPED - restarting in 5s")
+
+        except Exception as e:
+            logger.error(f"{name} CRASH: {e}")
+            traceback.print_exc()
+
+        time.sleep(5)
+
+
+# =========================
+# CRAWLER LOOP
+# =========================
+def crawl_loop():
+
+    while True:
+        try:
+            logger.info("CRAWLER START")
+            subprocess.run(["python", "crawler_engine_pro_final.py"])
+            logger.info("CRAWLER DONE")
+        except Exception as e:
+            logger.error(f"CRAWLER ERROR: {e}")
+            traceback.print_exc()
+
+        logger.info(f"Sleeping {CRAWL_INTERVAL} seconds")
+        time.sleep(CRAWL_INTERVAL)
+
+
+# =========================
+# MAIN
+# =========================
+def main():
+
+    logger.info("MASTER SYSTEM STARTED")
+
+    threading.Thread(target=crawl_loop, daemon=True).start()
+    threading.Thread(target=run_process,
+                     args=("QUEUE WORKER", "queued_worker.py"),
+                     daemon=True).start()
+
+    threading.Thread(target=run_process,
+                     args=("QBIT OPTIMIZER", "qbit_optimizer.py"),
+                     daemon=True).start()
+
+    while True:
+        time.sleep(60)
+
 
 if __name__ == "__main__":
     main()
