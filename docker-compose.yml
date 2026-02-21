@@ -65,7 +65,7 @@ services:
       - "8096:8096"
     volumes:
       - ./jellyfin-config:/config
-      - /data/movies:/media
+      - /data:/media
     networks:
       - media-net
 
