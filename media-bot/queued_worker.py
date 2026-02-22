@@ -92,11 +92,18 @@ def reset_stuck():
 
 
 # =========================
-# BUILD QUEUE
+# BUILD QUEUE (Agent Protected)
 # =========================
 def build_queue():
     conn = get_conn()
     c = conn.cursor()
+
+    # L?y code dã có trong agent
+    agent_codes = {
+        r[0].upper() for r in c.execute(
+            "SELECT code FROM agent_snapshot"
+        ).fetchall()
+    }
 
     codes = c.execute("""
         SELECT DISTINCT code FROM crawl
@@ -104,6 +111,12 @@ def build_queue():
     """).fetchall()
 
     for (code,) in codes:
+
+        code_upper = code.upper()
+
+        # N?u agent dã có ? skip
+        if code_upper in agent_codes:
+            continue
 
         existing = c.execute(
             "SELECT status FROM queuedqbit WHERE code=?",
@@ -149,7 +162,7 @@ def build_queue():
 
 
 # =========================
-# ADD TORRENT + SAVE HASH
+# ADD TORRENT + DOUBLE CHECK AGENT
 # =========================
 def add_torrent():
 
@@ -169,6 +182,24 @@ def add_torrent():
         return
 
     row_id, code, url = row
+
+    # ===== Double Check Agent =====
+    exists = c.execute(
+        "SELECT 1 FROM agent_snapshot WHERE UPPER(code)=?",
+        (code.upper(),)
+    ).fetchone()
+
+    if exists:
+        c.execute("""
+            UPDATE queuedqbit
+            SET status='existed'
+            WHERE id=?
+        """, (row_id,))
+        conn.commit()
+        conn.close()
+        logger.info(f"Skip add (already in agent): {code}")
+        return
+    # =================================
 
     try:
         c.execute("UPDATE queuedqbit SET status='adding' WHERE id=?", (row_id,))
@@ -236,7 +267,7 @@ def add_torrent():
 
 
 # =========================
-# MONITOR COMPLETE (HASH BASED)
+# MONITOR COMPLETE
 # =========================
 def monitor_complete():
 
