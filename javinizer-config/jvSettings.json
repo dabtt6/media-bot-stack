@@ -1,8 +1,8 @@
 {
   "throttlelimit": 3,
   "sleep": 3,
-  "location.input": "",
-  "location.output": "",
+  "location.input": "/data/movies",
+  "location.output": "/data/movies",
   "location.thumbcsv": "",
   "location.genrecsv": "",
   "location.uncensorcsv": "",
