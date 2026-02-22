@@ -42,7 +42,7 @@ services:
     container_name: javinizer
     restart: unless-stopped
     volumes:
-      - /data:/data
+      - /data/movies:/data
       - /docker/media-stack/javinizer-config:/root/.local/share/javinizer
     networks:
       - media-net
