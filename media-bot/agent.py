@@ -95,15 +95,22 @@ def scan_once():
                     valid_codes += 1
 
     for code, (source_type, real_name) in found.items():
-        c.execute("""
-            INSERT INTO agent_snapshot (code, source_type, real_name, last_seen)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(code) DO UPDATE SET
-                source_type=excluded.source_type,
-                real_name=excluded.real_name,
-                last_seen=excluded.last_seen
-        """, (code, source_type, real_name, now))
-
+    c.execute("""
+        INSERT INTO agent_snapshot (code, source_type, real_name, last_seen)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(code) DO UPDATE SET
+            source_type=?,
+            real_name=?,
+            last_seen=?
+    """, (
+        code,
+        source_type,
+        real_name,
+        now,
+        source_type,
+        real_name,
+        now
+    ))
     conn.commit()
     conn.close()
 
