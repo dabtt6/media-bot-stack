@@ -113,7 +113,7 @@ services:
     volumes:
       - ./movie-agent:/app
       - ./media-bot/data:/app/data
-      - /data:/data
+      - /data/movies:/data
     networks:
       - media-net
 
