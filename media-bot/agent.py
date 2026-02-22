@@ -25,8 +25,19 @@ def log(msg):
 # EXTRACT CODE
 # =========================
 def extract_code(text):
-    m = re.search(r'\b([A-Z]{2,10}-\d{2,6})\b', text.upper())
-    return m.group(1) if m else None
+    text = text.upper()
+
+    # Uu tiên FC2-PPV
+    m = re.search(r'(FC2[-_]?PPV[-_]?\d+)', text)
+    if m:
+        return m.group(1).replace("_", "-")
+
+    # Chu?n ABC-123
+    m = re.search(r'([A-Z0-9]+-\d+)', text)
+    if m:
+        return m.group(1)
+
+    return None
 
 
 # =========================
