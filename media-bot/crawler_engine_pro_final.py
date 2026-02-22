@@ -22,9 +22,22 @@ SLEEP_BETWEEN_MOVIE = 0.15
 # =========================
 # LOGGER
 # =========================
-def log(msg):
-    print(f"{datetime.now().strftime('%H:%M:%S')} | {msg}", flush=True)
+# =========================
+# LOGGER
+# =========================
+def log(*args):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    if len(args) == 1:
+        level = "INFO"
+        msg = args[0]
+    elif len(args) == 2:
+        level, msg = args
+    else:
+        level = "INFO"
+        msg = " ".join(str(a) for a in args)
+
+    print(f"{now} | TOOL1 | {level} | {msg}", flush=True)
 
 # =========================
 # DB CONNECT
