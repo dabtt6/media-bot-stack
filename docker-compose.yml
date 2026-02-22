@@ -98,6 +98,24 @@ services:
     networks:
       - media-net
 
+  movie-agent:
+    image: python:3.11-slim
+    container_name: movie-agent
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+      pip install --no-cache-dir flask requests &&
+      python agent.py
+      "
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./movie-agent:/app
+      - /data:/data
+    networks:
+      - media-net
+
 
 networks:
   media-net:
