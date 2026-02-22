@@ -25,7 +25,7 @@ def log(msg):
 # UTILS
 # =========================
 def extract_code(text):
-    m = re.search(r'([A-Z0-9]+-\d+)', text.upper())
+    m = re.search(r'\b([A-Z]{2,10}-\d{2,6})\b', text.upper())
     return m.group(1) if m else None
 
 
@@ -35,15 +35,25 @@ def extract_code(text):
 def ensure_table():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS agent_snapshot (
             code TEXT PRIMARY KEY,
             source_type TEXT CHECK(source_type IN ('folder','file')),
+            real_name TEXT,
             last_seen TEXT
         )
     """)
+
+    # N?u DB cu chua có real_name
+    try:
+        c.execute("ALTER TABLE agent_snapshot ADD COLUMN real_name TEXT")
+    except:
+        pass
+
     conn.commit()
     conn.close()
+
     log("agent_snapshot table ensured")
 
 
@@ -66,6 +76,7 @@ def scan_once():
     valid_codes = 0
 
     for name in os.listdir(BASE_PATH):
+
         total_items += 1
         full_path = os.path.join(BASE_PATH, name)
 
@@ -74,28 +85,37 @@ def scan_once():
             continue
 
         if os.path.isdir(full_path):
-            found[code] = "folder"
+            found[code] = ("folder", name)
             valid_codes += 1
 
         elif os.path.isfile(full_path):
             if name.lower().endswith(VIDEO_EXT):
                 if code not in found:
-                    found[code] = "file"
+                    found[code] = ("file", name)
                     valid_codes += 1
 
-    for code, source_type in found.items():
+    for code, (source_type, real_name) in found.items():
         c.execute("""
-            INSERT INTO agent_snapshot (code, source_type, last_seen)
-            VALUES (?, ?, ?)
+            INSERT INTO agent_snapshot (code, source_type, real_name, last_seen)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(code) DO UPDATE SET
                 source_type=excluded.source_type,
+                real_name=excluded.real_name,
                 last_seen=excluded.last_seen
-        """, (code, source_type, now))
+        """, (code, source_type, real_name, now))
 
     conn.commit()
     conn.close()
 
     log(f"Scan complete | Total items: {total_items} | Valid codes: {valid_codes}")
+
+
+# =========================
+# RUN ONCE
+# =========================
+def run_once():
+    ensure_table()
+    scan_once()
 
 
 # =========================
@@ -115,13 +135,9 @@ def main():
         time.sleep(SCAN_INTERVAL)
 
 
-# =========================
-# ENTRY
-# =========================
 if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "once":
-        ensure_table()
-        scan_once()
+        run_once()
     else:
         main()
