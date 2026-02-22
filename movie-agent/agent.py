@@ -4,24 +4,34 @@ import os
 import re
 import sqlite3
 import time
+import sys
 from datetime import datetime
 
-BASE_PATH = "/data"          # ÐÚNG v?i docker mount hi?n t?i
+BASE_PATH = "/data"
 DB_PATH = "/app/data/crawler_master_full.db"
 SCAN_INTERVAL = 60
 
 VIDEO_EXT = (".mp4", ".mkv", ".avi", ".mov")
 
 
+# =========================
+# LOGGER
+# =========================
 def log(msg):
-    print(f"[AGENT] {datetime.now().isoformat()} - {msg}", flush=True)
+    print(f"[AGENT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {msg}", flush=True)
 
 
+# =========================
+# UTILS
+# =========================
 def extract_code(text):
     m = re.search(r'([A-Z0-9]+-\d+)', text.upper())
     return m.group(1) if m else None
 
 
+# =========================
+# DB TABLE
+# =========================
 def ensure_table():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -37,7 +47,11 @@ def ensure_table():
     log("agent_snapshot table ensured")
 
 
+# =========================
+# SCAN CORE
+# =========================
 def scan_once():
+
     if not os.path.exists(BASE_PATH):
         log(f"Movies path not found: {BASE_PATH}")
         return
@@ -84,6 +98,9 @@ def scan_once():
     log(f"Scan complete | Total items: {total_items} | Valid codes: {valid_codes}")
 
 
+# =========================
+# LOOP MODE
+# =========================
 def main():
     log("Movie Agent started")
     log(f"Scanning path: {BASE_PATH}")
@@ -98,5 +115,13 @@ def main():
         time.sleep(SCAN_INTERVAL)
 
 
+# =========================
+# ENTRY
+# =========================
 if __name__ == "__main__":
-    main()
+
+    if len(sys.argv) > 1 and sys.argv[1] == "once":
+        ensure_table()
+        scan_once()
+    else:
+        main()

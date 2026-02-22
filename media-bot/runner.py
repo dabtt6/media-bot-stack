@@ -89,7 +89,7 @@ def main():
 
     threading.Thread(
         target=run_process,
-        args=("QUEUE WORKER", "queue_worker.py"),
+        args=("QUEUE WORKER", "queued_worker.py"),
         daemon=True
     ).start()
 
