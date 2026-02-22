@@ -4,6 +4,7 @@ import os
 import re
 import sqlite3
 import time
+import sys
 from datetime import datetime
 
 BASE_PATH = "/data"
@@ -98,14 +99,6 @@ def scan_once():
 
 
 # =========================
-# RUN ONCE (CHO RUNNER)
-# =========================
-def run_once():
-    ensure_table()
-    scan_once()
-
-
-# =========================
 # LOOP MODE
 # =========================
 def main():
@@ -122,5 +115,13 @@ def main():
         time.sleep(SCAN_INTERVAL)
 
 
+# =========================
+# ENTRY
+# =========================
 if __name__ == "__main__":
-    main()
+
+    if len(sys.argv) > 1 and sys.argv[1] == "once":
+        ensure_table()
+        scan_once()
+    else:
+        main()
