@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB = 'crawler_master_full.db'
+DB = os.path.join(BASE_DIR, "data", "crawler_master_full.db")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 MAX_RETRY = 3
