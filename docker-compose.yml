@@ -81,6 +81,23 @@ services:
     networks:
       - media-net
 
+  media-bot-post:
+    build: ./media-bot
+    container_name: media-bot-post
+    command: ["python", "-u", "post_processor.py"]
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+    environment:
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+    volumes:
+      - ./media-bot/data:/app/data
+      - /data:/data
+    networks:
+      - media-net
+
 
 networks:
   media-net:
