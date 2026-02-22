@@ -9,7 +9,7 @@ from datetime import datetime
 
 BASE_PATH = "/data"
 DB_PATH = "/app/data/crawler_master_full.db"
-SCAN_INTERVAL = 60
+SCAN_INTERVAL = 6000
 
 VIDEO_EXT = (".mp4", ".mkv", ".avi", ".mov")
 
