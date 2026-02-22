@@ -112,6 +112,7 @@ services:
       - "5001:5001"
     volumes:
       - ./movie-agent:/app
+      - ./media-bot/data:/app/data
       - /data:/data
     networks:
       - media-net
