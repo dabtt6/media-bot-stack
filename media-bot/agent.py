@@ -22,7 +22,7 @@ def log(msg):
 
 
 # =========================
-# UTILS
+# EXTRACT CODE
 # =========================
 def extract_code(text):
     m = re.search(r'\b([A-Z]{2,10}-\d{2,6})\b', text.upper())
@@ -30,7 +30,7 @@ def extract_code(text):
 
 
 # =========================
-# DB TABLE
+# ENSURE TABLE
 # =========================
 def ensure_table():
     conn = sqlite3.connect(DB_PATH)
@@ -45,7 +45,6 @@ def ensure_table():
         )
     """)
 
-    # N?u DB cu chua có real_name
     try:
         c.execute("ALTER TABLE agent_snapshot ADD COLUMN real_name TEXT")
     except:
@@ -54,11 +53,9 @@ def ensure_table():
     conn.commit()
     conn.close()
 
-    log("agent_snapshot table ensured")
-
 
 # =========================
-# SCAN CORE
+# SCAN ONCE
 # =========================
 def scan_once():
 
@@ -94,23 +91,29 @@ def scan_once():
                     found[code] = ("file", name)
                     valid_codes += 1
 
-    for code, (source_type, real_name) in found.items():
-    c.execute("""
-        INSERT INTO agent_snapshot (code, source_type, real_name, last_seen)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(code) DO UPDATE SET
-            source_type=?,
-            real_name=?,
-            last_seen=?
-    """, (
-        code,
-        source_type,
-        real_name,
-        now,
-        source_type,
-        real_name,
-        now
-    ))
+    # ?? update DB
+    for code, value in found.items():
+
+        source_type = value[0]
+        real_name = value[1]
+
+        c.execute("""
+            INSERT INTO agent_snapshot (code, source_type, real_name, last_seen)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(code) DO UPDATE SET
+                source_type=?,
+                real_name=?,
+                last_seen=?
+        """, (
+            code,
+            source_type,
+            real_name,
+            now,
+            source_type,
+            real_name,
+            now
+        ))
+
     conn.commit()
     conn.close()
 
@@ -130,7 +133,6 @@ def run_once():
 # =========================
 def main():
     log("Movie Agent started")
-    log(f"Scanning path: {BASE_PATH}")
     ensure_table()
 
     while True:
@@ -142,6 +144,9 @@ def main():
         time.sleep(SCAN_INTERVAL)
 
 
+# =========================
+# ENTRY
+# =========================
 if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "once":

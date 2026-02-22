@@ -33,6 +33,7 @@ services:
       - QBIT_PASS=111111
     volumes:
       - ./media-bot/data:/app/data
+      - /data/movies:/data
     networks:
       - media-net
 
