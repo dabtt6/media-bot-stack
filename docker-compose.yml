@@ -16,6 +16,8 @@ services:
     volumes:
       - ./qbit-config:/config
       - /data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - media-net
 
@@ -28,12 +30,60 @@ services:
     depends_on:
       - qbittorrent
     environment:
+      - TZ=Asia/Ho_Chi_Minh
       - QBIT_URL=http://qbittorrent:8080
       - QBIT_USER=admin
       - QBIT_PASS=111111
     volumes:
       - ./media-bot/data:/app/data
       - /data/movies:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    networks:
+      - media-net
+
+
+  media-bot-post:
+    build: ./media-bot
+    container_name: media-bot-post
+    command: ["python", "-u", "post_processor.py"]
+    restart: unless-stopped
+    depends_on:
+      - qbittorrent
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - QBIT_URL=http://qbittorrent:8080
+      - QBIT_USER=admin
+      - QBIT_PASS=111111
+    volumes:
+      - ./media-bot/data:/app/data
+      - /data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    networks:
+      - media-net
+
+
+  movie-agent:
+    image: python:3.11-slim
+    container_name: movie-agent
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+      pip install --no-cache-dir flask requests &&
+      python agent.py
+      "
+    ports:
+      - "5001:5001"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - ./movie-agent:/app
+      - ./media-bot/data:/app/data
+      - /data/movies:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - media-net
 
@@ -42,9 +92,13 @@ services:
     image: javinizer/javinizer:latest-cli
     container_name: javinizer
     restart: unless-stopped
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
     volumes:
       - /data/movies:/data
       - /docker/media-stack/javinizer-config:/root/.local/share/javinizer
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - media-net
     command:
@@ -64,9 +118,13 @@ services:
     restart: unless-stopped
     ports:
       - "8096:8096"
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
     volumes:
       - ./jellyfin-config:/config
       - /data:/media
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - media-net
 
@@ -79,42 +137,8 @@ services:
       - "9000:9000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - media-net
-
-  media-bot-post:
-    build: ./media-bot
-    container_name: media-bot-post
-    command: ["python", "-u", "post_processor.py"]
-    restart: unless-stopped
-    depends_on:
-      - qbittorrent
-    environment:
-      - QBIT_URL=http://qbittorrent:8080
-      - QBIT_USER=admin
-      - QBIT_PASS=111111
-    volumes:
-      - ./media-bot/data:/app/data
-      - /data:/data
-    networks:
-      - media-net
-
-  movie-agent:
-    image: python:3.11-slim
-    container_name: movie-agent
-    restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "
-      pip install --no-cache-dir flask requests &&
-      python agent.py
-      "
-    ports:
-      - "5001:5001"
-    volumes:
-      - ./movie-agent:/app
-      - ./media-bot/data:/app/data
-      - /data/movies:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     networks:
       - media-net
 
