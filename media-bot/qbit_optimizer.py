@@ -11,9 +11,10 @@ QBIT_PASS = os.getenv("QBIT_PASS")
 
 SESSION = requests.Session()
 
-CHECK_INTERVAL = 10
-MAX_ACTIVE = 3
-MIN_SEED_KEEP = 2  # Không pause n?u seed v?n >= m?c này
+CHECK_INTERVAL = 60        # chu k? full loop
+BURST_WAIT = 15            # ch? do t?c
+MAX_ACTIVE = 5             # ch?n top 5
+
 
 # ================= LOGIN =================
 def login():
@@ -23,16 +24,8 @@ def login():
             data={"username": QBIT_USER, "password": QBIT_PASS},
             timeout=10
         )
-
-        if r.status_code == 200 and "Ok" in r.text:
-            log("TOOL5", "INFO", "qBit connected")
-            return True
-
-        log("TOOL5", "WARNING", f"Login failed: {r.text}")
-        return False
-
-    except Exception as e:
-        log("TOOL5", "ERROR", f"Login error: {str(e)}")
+        return r.status_code == 200 and "Ok" in r.text
+    except:
         return False
 
 
@@ -44,8 +37,7 @@ def get_torrents():
             timeout=10
         )
         return r.json()
-    except Exception as e:
-        log("TOOL5", "ERROR", f"Fetch torrents error: {str(e)}")
+    except:
         return []
 
 
@@ -64,102 +56,67 @@ def resume(hash_value):
     )
 
 
-# ================= BLOCK SEEDING =================
-def block_seeding(torrents):
-    for t in torrents:
-        if t["progress"] == 1 and t["state"] in ("uploading", "stalledUP"):
-            pause(t["hash"])
-            log("TOOL5", "SEED-BLOCK", f"Paused seeding {t['name']}")
-
-
-# ================= SCORE CALC =================
-def calculate_score(t):
-    seeds = t.get("num_seeds", 0)
-    speed = t.get("dlspeed", 0)
-    progress = t.get("progress", 0)
-
-    # Uu tiên:
-    # Seed quan tr?ng nh?t
-    # Speed quan tr?ng th? hai
-    # Tr? di?m n?u g?n xong (d? tránh gi? slot)
-    return (seeds * 3) + (speed / 100000) - (progress * 5)
-
-
-# ================= SMART SELECT =================
-def select_best(torrents):
-
-    candidates = [
-        t for t in torrents
-        if t["progress"] < 1
-        and t["state"] in ("downloading", "pausedDL", "stalledDL")
-    ]
-
-    if not candidates:
-        return []
-
-    for t in candidates:
-        t["_score"] = calculate_score(t)
-
-    candidates.sort(key=lambda x: x["_score"], reverse=True)
-
-    return candidates[:MAX_ACTIVE]
-
-
 # ================= MAIN =================
 def main():
 
-    log("TOOL5", "START", "Optimizer started")
+    log("TOOL5", "START", "Burst Optimizer Started")
 
     while True:
 
         if not login():
-            time.sleep(10)
+            log("TOOL5", "ERROR", "Login failed")
+            time.sleep(5)
             continue
 
         torrents = get_torrents()
 
-        if not torrents:
+        # L?c torrent chua hoàn thành
+        candidates = [
+            t for t in torrents
+            if t["progress"] < 1
+        ]
+
+        if not candidates:
             time.sleep(CHECK_INTERVAL)
             continue
 
-        # 1?? Ch?n seeding
-        block_seeding(torrents)
+        log("TOOL5", "BURST", "Resuming all candidates")
 
-        # 2?? L?y torrent dang download
+        # 1?? Resume t?t c?
+        for t in candidates:
+            resume(t["hash"])
+
+        # 2?? Ð?i ?n d?nh t?c d?
+        time.sleep(BURST_WAIT)
+
+        # 3?? L?y snapshot m?i
+        torrents = get_torrents()
+
         active = [
             t for t in torrents
-            if t["state"] in ("downloading", "stalledDL")
+            if t["progress"] < 1
         ]
 
-        # 3?? Ch?n top torrent theo score
-        selected = select_best(torrents)
-        selected_hashes = {t["hash"] for t in selected}
+        # 4?? Sort theo t?c d? th?c t?
+        active.sort(
+            key=lambda x: x.get("dlspeed", 0),
+            reverse=True
+        )
 
-        # 4?? Pause torrent y?u (anti-flapping)
+        selected = active[:MAX_ACTIVE]
+        selected_hash = {t["hash"] for t in selected}
+
+        # 5?? Pause ph?n còn l?i
         for t in active:
-            if (
-                t["hash"] not in selected_hashes
-                and t.get("num_seeds", 0) < MIN_SEED_KEEP
-            ):
+            if t["hash"] not in selected_hash:
                 pause(t["hash"])
-                log("TOOL5", "PAUSE", t["name"])
 
-        # 5?? Resume torrent du?c ch?n
+        # Log top
         for t in selected:
-            if t["state"] not in ("downloading", "stalledDL"):
-                resume(t["hash"])
-                log("TOOL5", "RESUME", t["name"])
+            speed = round(t["dlspeed"] / 1024, 1)
+            log("TOOL5", "RUN", f"{t['name']} {speed} KB/s")
 
-        # 6?? Log tr?ng thái
-        for t in selected:
-            speed_kb = round(t["dlspeed"] / 1024, 1)
-            log(
-                "TOOL5",
-                "RUN",
-                f"{t['name']} | Seeds:{t['num_seeds']} | {speed_kb} KB/s"
-            )
-
-        log("TOOL5", "SLEEP", f"{CHECK_INTERVAL}s")
+        log("TOOL5", "SLEEP", f"Next cycle in {CHECK_INTERVAL}s")
 
         time.sleep(CHECK_INTERVAL)
 
